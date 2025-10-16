@@ -85,7 +85,10 @@ func loadConfig() {
 }
 
 func fetchDefinition(word string) {
-	resp, err := http.Get("https://api.dictionaryapi.dev/api/v2/entries/en/" + word)
+	client := http.Client{
+	    Timeout: 5 * time.Second,
+	}
+	resp, err := client.Get("https://api.dictionaryapi.dev/api/v2/entries/en/" + word)
 	if err != nil {
 		// handle error
 		fmt.Println("Error fetching definition:", err)
