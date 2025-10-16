@@ -3,6 +3,7 @@ module wotd
 go 1.22.5
 
 require (
+	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/PuerkitoBio/goquery v1.9.2 // indirect
 	github.com/adrg/xdg v0.5.0 // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
@@ -16,6 +17,7 @@ require (
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/jawher/mow.cli v1.2.0 // indirect
 	github.com/kennygrant/sanitize v1.2.4 // indirect
+	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect
 	github.com/temoto/robotstxt v1.1.2 // indirect
 	github.com/xo/terminfo v0.0.0-20210125001918-ca9a967f8778 // indirect

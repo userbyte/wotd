@@ -1,4 +1,4 @@
-//usr/bin/env go run $0 $@ ; exit
+// usr/bin/env go run $0 $@ ; exit
 package main
 
 import (
@@ -9,10 +9,17 @@ import (
 	"os"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/adrg/xdg"
 	"github.com/gocolly/colly"
 	"github.com/gookit/color"
 )
+
+type Config struct {
+	Version int
+	Name    string
+	Tags    []string
+}
 
 var wd word_data
 
@@ -63,6 +70,20 @@ type DictionaryApiResp struct {
 	SourceUrls []string   `json:"sourceUrls"`
 }
 
+func loadConfig() {
+	doc, fileerr := os.ReadFile(xdg.CacheHome + "/wotd_word.json")
+	if fileerr != nil {
+		fmt.Println("### cfg file not exist, whatever")
+	}
+
+	var cfg Config
+	tomlerr := toml.Unmarshal([]byte(doc), &cfg)
+	if tomlerr != nil {
+		panic(tomlerr)
+	}
+	fmt.Println("cfg:", cfg)
+}
+
 func fetchDefinition(word string) {
 	resp, err := http.Get("https://api.dictionaryapi.dev/api/v2/entries/en/" + word)
 	if err != nil {
@@ -83,6 +104,7 @@ func fetchDefinition(word string) {
 
 	jsonerr := json.Unmarshal(body, &respdata)
 	if jsonerr != nil {
+		fmt.Println("could not fetch definition, likely a temporary DictionaryAPI issue. try again later?")
 		panic(jsonerr)
 	}
 
