@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/adrg/xdg"
 	"github.com/gocolly/colly"
 	"github.com/gookit/color"
@@ -70,23 +69,23 @@ type DictionaryApiResp struct {
 	SourceUrls []string   `json:"sourceUrls"`
 }
 
-func loadConfig() {
-	doc, fileerr := os.ReadFile(xdg.CacheHome + "/wotd_word.json")
-	if fileerr != nil {
-		fmt.Println("### cfg file not exist, whatever")
-	}
+// func loadConfig() {
+// 	doc, fileerr := os.ReadFile(xdg.CacheHome + "/wotd_word.json")
+// 	if fileerr != nil {
+// 		fmt.Println("### cfg file not exist, whatever")
+// 	}
 
-	var cfg Config
-	tomlerr := toml.Unmarshal([]byte(doc), &cfg)
-	if tomlerr != nil {
-		panic(tomlerr)
-	}
-	fmt.Println("cfg:", cfg)
-}
+// 	var cfg Config
+// 	tomlerr := toml.Unmarshal([]byte(doc), &cfg)
+// 	if tomlerr != nil {
+// 		panic(tomlerr)
+// 	}
+// 	fmt.Println("cfg:", cfg)
+// }
 
 func fetchDefinition(word string) {
 	client := http.Client{
-	    Timeout: 5 * time.Second,
+		Timeout: 5 * time.Second,
 	}
 	resp, err := client.Get("https://api.dictionaryapi.dev/api/v2/entries/en/" + word)
 	if err != nil {
@@ -94,7 +93,11 @@ func fetchDefinition(word string) {
 		fmt.Println("Error fetching definition:", err)
 		return
 	}
-	defer resp.Body.Close()
+
+	// close the body and check for errors
+	if cerr := resp.Body.Close(); cerr != nil {
+		fmt.Println("Error closing response body:", cerr)
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -167,19 +170,27 @@ func fetchWord() {
 	})
 
 	// do the scrapey
-	c.Visit("https://www.merriam-webster.com/word-of-the-day")
+	visitErr := c.Visit("https://www.merriam-webster.com/word-of-the-day")
+	if visitErr != nil {
+		fmt.Println("could not fetch word")
+		panic(visitErr.Error())
+	}
 
 	// get definition
 	fetchDefinition(wd.Word)
 
 	// convert wd struct to json
-	content, err := json.Marshal(wd)
-	if err != nil {
-		fmt.Println(err.Error())
+	content, marshalErr := json.Marshal(wd)
+	if marshalErr != nil {
+		fmt.Println(marshalErr.Error())
 	}
 
 	// save word data to cache
-	os.WriteFile(xdg.CacheHome+"/wotd_word.json", content, 0644)
+	wordWriteErr := os.WriteFile(xdg.CacheHome+"/wotd_word.json", content, 0644)
+	if wordWriteErr != nil {
+		fmt.Println("could not save word to cache")
+		fmt.Println(marshalErr.Error())
+	}
 
 	// save word date to cache
 	timenow := time.Now()
@@ -188,7 +199,12 @@ func fetchWord() {
 		timenow.Year(),
 		timenow.Month(),
 		timenow.Day())
-	os.WriteFile(xdg.CacheHome+"/wotd_cache_ts.txt", []byte(date), 0644)
+
+	tsWriteErr := os.WriteFile(xdg.CacheHome+"/wotd_cache_ts.txt", []byte(date), 0644)
+	if tsWriteErr != nil {
+		fmt.Println("could not save word to cache")
+		fmt.Println(marshalErr.Error())
+	}
 }
 
 func readWord() {
