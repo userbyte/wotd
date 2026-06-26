@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
-	"github.com/gocolly/colly"
 	"github.com/gookit/color"
 )
 
@@ -23,12 +22,13 @@ type Config struct {
 var wd word_data
 
 type word_data struct {
+	Date         string `json:"date"`
 	Word         string `json:"word"`
 	Definition   string `json:"definition"`
 	Description  string `json:"description"`
-	PartofSpeech string `json:"partofspeech"`
-	Syllables    string `json:"syllables"`
-	Usage        string `json:"usage"`
+	PartOfSpeech string `json:"partofspeech"`
+	Phonetics    string `json:"phonetics"`
+	Usage string `json:"usage"`
 }
 
 // i hate how many fucking structs i have to use for this but i dont understand go well enough to fix this
@@ -69,6 +69,14 @@ type DictionaryApiResp struct {
 	SourceUrls []string   `json:"sourceUrls"`
 }
 
+type WOTDApiResp struct {
+	Date         string `json:"date"`
+	Word         string `json:"word"`
+	PartOfSpeech string `json:"pos"`
+	Phonetics    string `json:"ipa"`
+	Definition   string `json:"definition"`
+}
+
 // func loadConfig() {
 // 	doc, fileerr := os.ReadFile(xdg.CacheHome + "/wotd_word.json")
 // 	if fileerr != nil {
@@ -90,20 +98,21 @@ func fetchDefinition(word string) {
 	resp, err := client.Get("https://api.dictionaryapi.dev/api/v2/entries/en/" + word)
 	if err != nil {
 		// handle error
-		fmt.Println("Error fetching definition:", err)
+		fmt.Println("error fetching definition:", err)
+		return
+	}
+
+	// read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		// handle error
+		fmt.Println("error reading response body:", err)
 		return
 	}
 
 	// close the body and check for errors
 	if cerr := resp.Body.Close(); cerr != nil {
-		fmt.Println("Error closing response body:", cerr)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		// handle error
-		fmt.Println("Error reading response body:", err)
-		return
+		fmt.Println("error closing response body:", cerr)
 	}
 
 	var respdata []DictionaryApiResp
@@ -111,7 +120,6 @@ func fetchDefinition(word string) {
 	jsonerr := json.Unmarshal(body, &respdata)
 	if jsonerr != nil {
 		fmt.Println("could not fetch definition, likely a temporary DictionaryAPI issue. try again later?")
-		panic(jsonerr)
 	}
 
 	// Assuming the API returns a list and you want the first item
@@ -133,50 +141,54 @@ func fetchDefinition(word string) {
 }
 
 func fetchWord() {
-	c := colly.NewCollector()
+	// get the current date
+	timenow := time.Now()
 
-	c.OnRequest(func(r *colly.Request) {
-		// fmt.Println("visiting", r.URL)
-	})
+	// format date to YYYY-MM-DD
+	date := timenow.Format("2006-01-02")
 
-	c.OnHTML("h2.word-header-txt", func(e *colly.HTMLElement) {
-		// fmt.Println("got word:", e.Text)
-
-		wd.Word = e.Text
-	})
-
-	c.OnHTML(".word-attributes span.main-attr", func(e *colly.HTMLElement) {
-		// fmt.Println("got word_partofspeech:", e.Text)
-
-		wd.PartofSpeech = e.Text
-	})
-
-	c.OnHTML(".word-attributes span.word-syllables", func(e *colly.HTMLElement) {
-		// fmt.Println("got word_syllables:", e.Text)
-
-		wd.Syllables = e.Text
-	})
-
-	c.OnHTML(".wod-definition-container > p:nth-child(2)", func(e *colly.HTMLElement) {
-		// fmt.Println("got word_description:", e.Text)
-
-		wd.Description = e.Text
-	})
-
-	c.OnHTML(".wod-definition-container > p:nth-child(3)", func(e *colly.HTMLElement) {
-		// fmt.Println("got word_usage:", e.Text)
-
-		wd.Usage = e.Text
-	})
-
-	// do the scrapey
-	visitErr := c.Visit("https://www.merriam-webster.com/word-of-the-day")
-	if visitErr != nil {
-		fmt.Println("could not fetch word")
-		panic(visitErr.Error())
+	// initialize http client
+	client := http.Client{
+		Timeout: 2500 * time.Millisecond,
 	}
 
-	// get definition
+	// send a request to WOTD API using today's date
+	resp, err := client.Get("https://api.wotd.site/query?date=" + date)
+	if err != nil {
+		// handle error
+		fmt.Println("error fetching word:", err)
+		return
+	}
+
+	// read response response body into a variable
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		// handle error
+		fmt.Println("error reading response body:", err)
+		return
+	}
+
+	// close the body and check for errors
+	if cerr := resp.Body.Close(); cerr != nil {
+		fmt.Println("error closing response body:", cerr)
+		panic(cerr)
+	}
+
+	var respdata WOTDApiResp
+
+	jsonerr := json.Unmarshal(body, &respdata)
+	if jsonerr != nil {
+		fmt.Println("error while parsing word data, likely a temporary WOTD API issue. try again later?")
+		panic(jsonerr)
+	}
+
+	wd.Date = respdata.Date
+	wd.Word = respdata.Word
+	wd.PartOfSpeech = respdata.PartOfSpeech
+	wd.Phonetics = respdata.Phonetics
+	wd.Definition = respdata.Definition
+
+	// try getting a better definition
 	fetchDefinition(wd.Word)
 
 	// convert wd struct to json
@@ -188,20 +200,6 @@ func fetchWord() {
 	// save word data to cache
 	wordWriteErr := os.WriteFile(xdg.CacheHome+"/wotd_word.json", content, 0644)
 	if wordWriteErr != nil {
-		fmt.Println("could not save word to cache")
-		fmt.Println(marshalErr.Error())
-	}
-
-	// save word date to cache
-	timenow := time.Now()
-
-	date := fmt.Sprintf("%d-%d-%d\n",
-		timenow.Year(),
-		timenow.Month(),
-		timenow.Day())
-
-	tsWriteErr := os.WriteFile(xdg.CacheHome+"/wotd_cache_ts.txt", []byte(date), 0644)
-	if tsWriteErr != nil {
 		fmt.Println("could not save word to cache")
 		fmt.Println(marshalErr.Error())
 	}
@@ -220,26 +218,36 @@ func readWord() {
 
 	fmt.Printf("%s (%s • %s)\n%s\n%s\n",
 		color.Bold.Sprintf(wd.Word),
-		color.OpItalic.Sprintf(wd.PartofSpeech),
-		wd.Syllables, color.Gray.Sprintf(wd.Definition),
+		color.OpItalic.Sprintf(wd.PartOfSpeech),
+		wd.Phonetics, color.Gray.Sprintf(wd.Definition),
 		color.OpItalic.Sprintf(color.Gray.Sprintf(wd.Usage)))
 
 }
 
 func cacheIsUpdated() bool {
-	content, err := os.ReadFile(xdg.CacheHome + "/wotd_cache_ts.txt")
-	if err != nil {
+	// read wotd cache file
+	fileContent, fileReadErr := os.ReadFile(xdg.CacheHome + "/wotd_word.json")
+	if fileReadErr != nil {
 		// fmt.Println("### wotd cache ts file doesnt exist")
 		return false
 	}
 
-	timenow := time.Now()
-	date := fmt.Sprintf("%d-%d-%d\n",
-		timenow.Year(),
-		timenow.Month(),
-		timenow.Day())
+	var cacheFileJSON word_data
+	// parse cache file into a JSON object
+	jsonerr := json.Unmarshal(fileContent, &cacheFileJSON)
+	if jsonerr != nil {
+		fmt.Println("failed to read cache file")
+		return false
+	}
 
-	return date == string(content)
+	// get the current date
+	timenow := time.Now()
+
+	// format date to YYYY-MM-DD
+	date := timenow.Format("2006-01-02")
+
+	// does the cache file date match the current date?
+	return cacheFileJSON.Date == date
 }
 
 func main() {
