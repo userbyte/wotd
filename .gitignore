@@ -21,5 +21,6 @@
 
 # ...even if they are in subdirectories
 !*/
+!user_install.sh
 
 node_modules/
